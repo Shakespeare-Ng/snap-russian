@@ -10,12 +10,12 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+    
     <style>
         /* 隐藏滚动条 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
+        
         /* 扫描动画 */
         @keyframes scan {
             0% { top: 0%; opacity: 0; }
@@ -23,12 +23,17 @@
             90% { opacity: 1; }
             100% { top: 100%; opacity: 0; }
         }
-
+        
         /* 禁用下拉刷新和回弹 */
-        body {
-            overscroll-behavior-y: none;
-            background-color: #000;
+        body { 
+            overscroll-behavior-y: none; 
+            background-color: #000; 
             padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        /* 点击高亮效果 */
+        .active-scale:active {
+            transform: scale(0.95);
         }
     </style>
 </head>
@@ -39,7 +44,7 @@
         // ==========================================
         // ⚠️ 智谱 AI API Key (已预填)
         // ==========================================
-        const zhipuKey = "2aa19b51c57d4c07b22b9fb8fb191fb7.7E5TE4TdpKdunI0y";
+        const zhipuKey = "2aa19b51c57d4c07b22b9fb8fb191fb7.7E5TE4TdpKdunI0y"; 
 
         // --- 智谱 JWT Token 生成工具 ---
         const generateZhipuToken = async (apiKey) => {
@@ -104,7 +109,8 @@
             RefreshCw: (props) => <Icon path={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} {...props} />,
             X: (props) => <Icon path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} {...props} />,
             ImageIcon: (props) => <Icon path={<><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></>} {...props} />,
-            Plus: (props) => <Icon path={<><path d="M5 12h14"/><path d="M12 5v14"/></>} {...props} />
+            Plus: (props) => <Icon path={<><path d="M5 12h14"/><path d="M12 5v14"/></>} {...props} />,
+            PlayCircle: (props) => <Icon path={<><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></>} {...props} />
         };
 
         const { useState, useEffect, useRef } = React;
@@ -156,13 +162,13 @@
             const [currentResult, setCurrentResult] = useState(null);
             const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
             const [errorMsg, setErrorMsg] = useState("");
-            const [showActionSheet, setShowActionSheet] = useState(false);
             const [isStorageFull, setIsStorageFull] = useState(false);
-
+            
+            // Camera State
             const [cameraStream, setCameraStream] = useState(null);
             const [facingMode, setFacingMode] = useState('environment');
             const [cameraError, setCameraError] = useState(false);
-
+            
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const fileInputRef = useRef(null);
@@ -254,7 +260,6 @@
                         const base64 = await fileToBase64(file);
                         setCurrentImage(base64);
                         if (view === 'camera') stopCamera();
-                        setShowActionSheet(false);
                         setView('processing');
                         analyzeImageWithZhipu(base64);
                     } catch (err) {
@@ -265,7 +270,7 @@
                 e.target.value = null;
             };
 
-            // --- 核心优化：智谱 GLM-4V-Plus 调用逻辑 ---
+            // --- 智谱 GLM-4V-Plus 调用逻辑 ---
             const analyzeImageWithZhipu = async (base64Image) => {
                 if (!zhipuKey) {
                     setErrorMsg("API Key 未配置");
@@ -281,15 +286,15 @@
                         {
                             role: "user",
                             content: [
-                                {
-                                    type: "text",
+                                { 
+                                    type: "text", 
                                     text: `(MANDATORY: NO TOOLS, NO SEARCH, NO THINKING PROCESS. JUST OUTPUT JSON.)
 任务：分析图片中最核心、最明显的一个物体，并提供相关的俄语学习卡片数据。
 
 要求：
 1. **精准识别**：找到图片视觉中心或占据最大面积的单一具体物体（例如“猫”、“苹果”、“电脑”）。不要描述背景或抽象概念。
 2. **俄语单词**：
-   - 必须是**俄语西里尔字母** (Cyrillic)。如果不确定，请再次确认该单词是否为俄语。
+   - 必须是**俄语西里尔字母** (Cyrillic)。
    - 必须是**名词单数主格**形式（初学者词汇）。
    - 不要带冠词或修饰语。
 3. **例句设计**：
@@ -308,7 +313,7 @@ JSON 模板：
     {"ru": "俄语例句1", "cn": "中文翻译1"},
     {"ru": "俄语例句2", "cn": "中文翻译2"}
   ]
-}`
+}` 
                                 },
                                 { type: "image_url", image_url: { url: base64Image } }
                             ]
@@ -322,10 +327,10 @@ JSON 模板：
                             "Content-Type": "application/json"
                         },
                         body: JSON.stringify({
-                            model: "glm-4v-plus", // 升级到 Plus 模型
+                            model: "glm-4v-plus", 
                             messages: messages,
-                            temperature: 0.1,
-                            top_p: 0.1,
+                            temperature: 0.1, 
+                            top_p: 0.1, 
                             max_tokens: 1024
                         })
                     });
@@ -337,13 +342,11 @@ JSON 模板：
 
                     const data = await response.json();
                     let content = data.choices[0].message.content;
-
-                    console.log("Raw AI Output:", content); // Debug log
-
+                    
                     // 增强型 JSON 提取逻辑
                     const startIndex = content.indexOf('{');
                     const endIndex = content.lastIndexOf('}');
-
+                    
                     if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
                         content = content.substring(startIndex, endIndex + 1);
                     } else {
@@ -351,10 +354,7 @@ JSON 模板：
                     }
 
                     const parsedResult = JSON.parse(content);
-
-                    // 防御性编程：如果 AI 返回的不是俄语（比如返回了英文），可以在这里简单判断一下（虽然 prompt 已经要求了）
-                    // 这里我们假设 Plus 模型遵循指令较好，暂时不做复杂正则判断以免误杀
-
+                    
                     setCurrentResult({
                         word: parsedResult.word || "Unknown",
                         pronunciation: parsedResult.pronunciation || "...",
@@ -387,13 +387,16 @@ JSON 模板：
                 setView('home');
             };
 
+            // 语音朗读功能 (语速放慢适合学习)
             const speakWord = (text) => {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
                     const u = new SpeechSynthesisUtterance(text);
-                    u.lang = 'ru-RU';
-                    u.rate = 0.9;
+                    u.lang = 'ru-RU'; // 强制俄语
+                    u.rate = 0.8;     // 语速 0.8 倍 (适合初学者)
                     window.speechSynthesis.speak(u);
+                } else {
+                    alert("您的浏览器不支持语音朗读功能");
                 }
             };
 
@@ -439,66 +442,9 @@ JSON 模板：
                         )}
                     </div>
                     <div className="absolute bottom-8 left-0 right-0 flex justify-center z-20 pointer-events-none pb-safe-bottom">
-                        <button onClick={() => setShowActionSheet(true)} className="pointer-events-auto bg-black text-white w-16 h-16 rounded-full shadow-2xl shadow-black/30 flex items-center justify-center transform active:scale-95 transition-all hover:scale-105 active:bg-gray-800">
+                        {/* 点击直接调用文件选择器 (手机端会自动弹相册/拍照) */}
+                        <button onClick={() => fileInputRef.current?.click()} className="pointer-events-auto bg-black text-white w-16 h-16 rounded-full shadow-2xl shadow-black/30 flex items-center justify-center transform active:scale-95 transition-all hover:scale-105 active:bg-gray-800">
                             <Icons.Plus className="w-7 h-7" />
-                        </button>
-                    </div>
-                    {showActionSheet && (
-                        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowActionSheet(false)} />
-                            <div className="bg-white rounded-t-[2rem] p-6 pb-12 z-50 animate-in slide-in-from-bottom duration-300">
-                                <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
-                                <div className="space-y-3">
-                                    <button onClick={() => { fileInputRef.current?.click(); setShowActionSheet(false); }} className="w-full bg-gray-50 active:bg-gray-200 p-4 rounded-2xl flex items-center gap-4 transition-colors">
-                                        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white">
-                                            <Icons.ImageIcon className="w-5 h-5" />
-                                        </div>
-                                        <span className="text-base font-bold text-gray-900">从相册选择</span>
-                                    </button>
-                                    <button onClick={() => { setView('camera'); setShowActionSheet(false); }} className="w-full bg-gray-50 active:bg-gray-200 p-4 rounded-2xl flex items-center gap-4 transition-colors">
-                                        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white">
-                                            <Icons.Camera className="w-5 h-5" />
-                                        </div>
-                                        <span className="text-base font-bold text-gray-900">拍摄新照片</span>
-                                    </button>
-                                    <button onClick={() => setShowActionSheet(false)} className="w-full mt-2 py-4 text-gray-400 font-bold active:text-gray-600 text-sm">取消</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-
-            const CameraView = () => (
-                <div className="fixed inset-0 bg-black z-50 flex flex-col h-full w-full">
-                    <canvas ref={canvasRef} className="hidden" />
-                    <div className="absolute inset-0 z-0 bg-black">
-                        {!cameraError ? (
-                            <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
-                        ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-white p-6 text-center">
-                                <Icons.AlertCircle className="w-10 h-10 mb-4 text-gray-500" />
-                                <p className="mb-4 text-gray-400 text-sm">无法调用摄像头</p>
-                                <button onClick={() => fileInputRef.current?.click()} className="bg-white text-black px-6 py-2 rounded-full font-bold text-sm">上传照片</button>
-                            </div>
-                        )}
-                    </div>
-                    <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-20 bg-gradient-to-b from-black/50 to-transparent">
-                        <button onClick={() => { stopCamera(); setView('home'); }} className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-md text-white flex items-center justify-center">
-                            <Icons.X className="w-4 h-4" />
-                        </button>
-                        <div className="text-white/80 font-medium text-[10px] bg-black/30 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">{facingMode === 'environment' ? '后置' : '前置'}</div>
-                        <div className="w-8" />
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-around px-10 pb-6 z-20">
-                        <button onClick={() => fileInputRef.current?.click()} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:scale-90 transition-all">
-                            <Icons.ImageIcon className="w-5 h-5" />
-                        </button>
-                        <button onClick={capturePhoto} disabled={cameraError} className="w-16 h-16 rounded-full border-[4px] border-white flex items-center justify-center bg-white/20 active:scale-90 transition-all active:bg-white/40">
-                            <div className="w-12 h-12 rounded-full bg-white shadow-lg"></div>
-                        </button>
-                        <button onClick={switchCamera} disabled={cameraError} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:rotate-180 transition-all duration-500">
-                            <Icons.RefreshCw className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
@@ -533,7 +479,13 @@ JSON 模板：
                                 </div>
                                 <div className="mt-4 text-center pb-2 relative">
                                     <h2 className="text-3xl font-black text-gray-800 tracking-tight">{currentResult?.word}</h2>
-                                    <p className="text-gray-400 font-medium mt-1 text-sm">/{currentResult?.pronunciation}/</p>
+                                    {/* 新单词页：音标 + 统一的喇叭按钮 */}
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                        <span className="text-gray-400 font-medium text-sm">/{currentResult?.pronunciation}/</span>
+                                        <button onClick={() => speakWord(currentResult?.word)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-blue-100 active:text-blue-600 active:scale-90 transition-all">
+                                            <Icons.Volume2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="absolute -top-3 -right-3 bg-yellow-400 text-black font-black px-4 py-2 rounded-xl shadow-lg transform rotate-6 border-2 border-white text-lg">
@@ -584,7 +536,8 @@ JSON 模板：
                                     <div key={idx} className="bg-gray-50 p-5 rounded-2xl relative group border border-gray-100">
                                         <p className="text-lg font-bold text-gray-800 mb-1 leading-tight">{sentence.ru}</p>
                                         <p className="text-gray-500 text-sm">{sentence.cn}</p>
-                                        <button onClick={() => speakWord(sentence.ru)} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white w-8 h-8 flex items-center justify-center rounded-full shadow-sm text-gray-400 active:text-blue-500 active:scale-90 transition-all">
+                                        {/* 例句朗读按钮：统一使用 Volume2 图标 */}
+                                        <button onClick={() => speakWord(sentence.ru)} className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 active:bg-blue-100 active:text-blue-600 active:scale-90 transition-all">
                                             <Icons.Volume2 className="w-4 h-4" />
                                         </button>
                                     </div>
@@ -594,6 +547,11 @@ JSON 模板：
                     </div>
                 );
             };
+
+            const CameraView = () => (
+                // 保留但不再使用，为了兼容性不删除
+                <div className="hidden"></div>
+            );
 
             const ErrorView = () => (
                 <div className="fixed inset-0 bg-gray-50 flex flex-col items-center justify-center p-8 z-50">
@@ -610,7 +568,6 @@ JSON 模板：
                 <div className="w-full h-full relative">
                     <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
                     {view === 'home' && <HomeView />}
-                    {view === 'camera' && <CameraView />}
                     {view === 'processing' && <ProcessingView />}
                     {view === 'result' && <ResultView />}
                     {view === 'detail' && <DetailView />}
