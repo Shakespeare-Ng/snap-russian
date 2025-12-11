@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Snap Russian</title>
+    <!-- 1. 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. 引入 React 和 Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 扫描动画 */
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        /* 禁用下拉刷新和回弹 */
+        body {
+            overscroll-behavior-y: none;
+            background-color: #000;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-[100dvh] w-screen overflow-hidden">
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        // ==========================================
+        // ⚠️ 智谱 AI API Key (已预填)
+        // ==========================================
+        const zhipuKey = "2aa19b51c57d4c07b22b9fb8fb191fb7.7E5TE4TdpKdunI0y";
+
+        // --- 智谱 JWT Token 生成工具 ---
+        const generateZhipuToken = async (apiKey) => {
+            try {
+                const [id, secret] = apiKey.split('.');
+                if (!id || !secret) throw new Error("Key 格式错误");
+
+                const now = Date.now();
+                const header = { alg: 'HS256', sign_type: 'SIGN' };
+                const payload = {
+                    api_key: id,
+                    exp: now + 3600 * 1000,
+                    timestamp: now
+                };
+
+                const base64UrlEncode = (str) => {
+                    return btoa(String.fromCharCode(...new Uint8Array(str)))
+                        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                };
+
+                const textEncoder = new TextEncoder();
+                const encodedHeader = base64UrlEncode(textEncoder.encode(JSON.stringify(header)));
+                const encodedPayload = base64UrlEncode(textEncoder.encode(JSON.stringify(payload)));
+
+                const key = await window.crypto.subtle.importKey(
+                    "raw",
+                    textEncoder.encode(secret),
+                    { name: "HMAC", hash: "SHA-256" },
+                    false,
+                    ["sign"]
+                );
+
+                const signature = await window.crypto.subtle.sign(
+                    "HMAC",
+                    key,
+                    textEncoder.encode(`${encodedHeader}.${encodedPayload}`)
+                );
+
+                return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(signature)}`;
+            } catch (e) {
+                console.error("Token生成失败:", e);
+                return null;
+            }
+        };
+
+        // --- 图标组件 ---
+        const Icon = ({ path, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+                {path}
+            </svg>
+        );
+
+        const Icons = {
+            Camera: (props) => <Icon path={<><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></>} {...props} />,
+            ChevronLeft: (props) => <Icon path={<path d="m15 18-6-6 6-6"/>} {...props} />,
+            Volume2: (props) => <Icon path={<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></>} {...props} />,
+            Sparkles: (props) => <Icon path={<><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 7h4"/><path d="M3 3h4"/></>} {...props} />,
+            BookOpen: (props) => <Icon path={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>} {...props} />,
+            Share2: (props) => <Icon path={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></>} {...props} />,
+            Loader2: (props) => <Icon path={<path d="M21 12a9 9 0 1 1-6.219-8.56"/>} {...props} />,
+            AlertCircle: (props) => <Icon path={<><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></>} {...props} />,
+            RefreshCw: (props) => <Icon path={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} {...props} />,
+            X: (props) => <Icon path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} {...props} />,
+            ImageIcon: (props) => <Icon path={<><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></>} {...props} />,
+            Plus: (props) => <Icon path={<><path d="M5 12h14"/><path d="M12 5v14"/></>} {...props} />
+        };
+
+        const { useState, useEffect, useRef } = React;
+
+        const getCurrentDate = () => {
+            const options = { month: 'short', day: 'numeric' };
+            return new Date().toLocaleDateString('en-US', options);
+        };
+
+        const getPastelColor = (index) => {
+            const colors = ['bg-green-100', 'bg-purple-100', 'bg-blue-100', 'bg-yellow-100', 'bg-rose-100'];
+            return colors[index % colors.length];
+        };
+
+        const fileToBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = (error) => reject(error);
+            });
+        };
+
+        const compressImage = (base64Str, maxWidth = 320, quality = 0.6) => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = base64Str;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+            });
+        };
+
+        function App() {
+            const [view, setView] = useState('home');
+            const [history, setHistory] = useState([]);
+            const [currentImage, setCurrentImage] = useState(null);
+            const [currentResult, setCurrentResult] = useState(null);
+            const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+            const [errorMsg, setErrorMsg] = useState("");
+            const [showActionSheet, setShowActionSheet] = useState(false);
+            const [isStorageFull, setIsStorageFull] = useState(false);
+
+            const [cameraStream, setCameraStream] = useState(null);
+            const [facingMode, setFacingMode] = useState('environment');
+            const [cameraError, setCameraError] = useState(false);
+
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const fileInputRef = useRef(null);
+
+            useEffect(() => {
+                try {
+                    const saved = localStorage.getItem('russian_snap_history');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed)) setHistory(parsed);
+                    }
+                } catch (e) {
+                    setHistory([]);
+                }
+            }, []);
+
+            useEffect(() => {
+                const saveData = (data) => {
+                    try {
+                        localStorage.setItem('russian_snap_history', JSON.stringify(data));
+                        setIsStorageFull(false);
+                    } catch (e) {
+                        if (e.name === 'QuotaExceededError') {
+                            setIsStorageFull(true);
+                            if (data.length > 0) {
+                                saveData(data.slice(0, -1));
+                                setHistory(data.slice(0, -1));
+                            }
+                        }
+                    }
+                };
+                if (history.length > 0) saveData(history);
+            }, [history]);
+
+            const startCamera = async () => {
+                setCameraError(false);
+                try {
+                    if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: facingMode, width: { ideal: 1080 }, height: { ideal: 1920 } },
+                        audio: false
+                    });
+                    setCameraStream(stream);
+                    if (videoRef.current) videoRef.current.srcObject = stream;
+                } catch (err) {
+                    console.error(err);
+                    setCameraError(true);
+                }
+            };
+
+            const stopCamera = () => {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    setCameraStream(null);
+                }
+            };
+
+            const switchCamera = () => setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+
+            useEffect(() => {
+                if (view === 'camera' && !cameraError) startCamera();
+                return () => { if (cameraStream) stopCamera(); };
+            }, [view, facingMode]);
+
+            const capturePhoto = () => {
+                if (videoRef.current && canvasRef.current) {
+                    const video = videoRef.current;
+                    const canvas = canvasRef.current;
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    if (facingMode === 'user') {
+                        ctx.translate(canvas.width, 0);
+                        ctx.scale(-1, 1);
+                    }
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const base64 = canvas.toDataURL('image/jpeg');
+                    setCurrentImage(base64);
+                    stopCamera();
+                    setView('processing');
+                    analyzeImageWithZhipu(base64);
+                }
+            };
+
+            const handleFileChange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        const base64 = await fileToBase64(file);
+                        setCurrentImage(base64);
+                        if (view === 'camera') stopCamera();
+                        setShowActionSheet(false);
+                        setView('processing');
+                        analyzeImageWithZhipu(base64);
+                    } catch (err) {
+                        setErrorMsg("加载图片失败");
+                        setView('error');
+                    }
+                }
+                e.target.value = null;
+            };
+
+            // --- 核心优化：智谱 GLM-4V-Plus 调用逻辑 ---
+            const analyzeImageWithZhipu = async (base64Image) => {
+                if (!zhipuKey) {
+                    setErrorMsg("API Key 未配置");
+                    setView('error');
+                    return;
+                }
+
+                try {
+                    const token = await generateZhipuToken(zhipuKey);
+                    if (!token) throw new Error("鉴权 Token 生成失败");
+
+                    const messages = [
+                        {
+                            role: "user",
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `(MANDATORY: NO TOOLS, NO SEARCH, NO THINKING PROCESS. JUST OUTPUT JSON.)
+任务：分析图片中最核心、最明显的一个物体，并提供相关的俄语学习卡片数据。
+
+要求：
+1. **精准识别**：找到图片视觉中心或占据最大面积的单一具体物体（例如“猫”、“苹果”、“电脑”）。不要描述背景或抽象概念。
+2. **俄语单词**：
+   - 必须是**俄语西里尔字母** (Cyrillic)。如果不确定，请再次确认该单词是否为俄语。
+   - 必须是**名词单数主格**形式（初学者词汇）。
+   - 不要带冠词或修饰语。
+3. **例句设计**：
+   - 提供2个例句。
+   - 必须是**A1初学者难度**。
+   - 句子结构简单（主语+谓语+宾语）。
+   - 包含中文翻译。
+4. **格式**：仅返回纯净的 JSON 字符串，不要使用 markdown 代码块。
+
+JSON 模板：
+{
+  "word": "俄语单词",
+  "pronunciation": "拉丁字母注音",
+  "meaning": "中文含义",
+  "sentences": [
+    {"ru": "俄语例句1", "cn": "中文翻译1"},
+    {"ru": "俄语例句2", "cn": "中文翻译2"}
+  ]
+}`
+                                },
+                                { type: "image_url", image_url: { url: base64Image } }
+                            ]
+                        }
+                    ];
+
+                    const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            model: "glm-4v-plus", // 升级到 Plus 模型
+                            messages: messages,
+                            temperature: 0.1,
+                            top_p: 0.1,
+                            max_tokens: 1024
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(`Zhipu API Error: ${errData.error?.message || response.status}`);
+                    }
+
+                    const data = await response.json();
+                    let content = data.choices[0].message.content;
+
+                    console.log("Raw AI Output:", content); // Debug log
+
+                    // 增强型 JSON 提取逻辑
+                    const startIndex = content.indexOf('{');
+                    const endIndex = content.lastIndexOf('}');
+
+                    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+                        content = content.substring(startIndex, endIndex + 1);
+                    } else {
+                        throw new Error("AI 返回格式错误，未找到有效的 JSON 数据");
+                    }
+
+                    const parsedResult = JSON.parse(content);
+
+                    // 防御性编程：如果 AI 返回的不是俄语（比如返回了英文），可以在这里简单判断一下（虽然 prompt 已经要求了）
+                    // 这里我们假设 Plus 模型遵循指令较好，暂时不做复杂正则判断以免误杀
+
+                    setCurrentResult({
+                        word: parsedResult.word || "Unknown",
+                        pronunciation: parsedResult.pronunciation || "...",
+                        meaning: parsedResult.meaning || "未识别",
+                        sentences: Array.isArray(parsedResult.sentences) ? parsedResult.sentences : [],
+                    });
+                    setView('result');
+
+                } catch (err) {
+                    console.error(err);
+                    setErrorMsg("AI 识别失败: " + err.message);
+                    setView('error');
+                }
+            };
+
+            const saveResult = async () => {
+                const compressedImage = await compressImage(currentImage, 320, 0.6);
+                const today = getCurrentDate();
+                const newItem = { id: Date.now(), image: compressedImage, ...currentResult, timestamp: Date.now() };
+                setHistory(prev => {
+                    const safeHistory = Array.isArray(prev) ? prev : [];
+                    const idx = safeHistory.findIndex(d => d.date === today);
+                    if (idx >= 0) {
+                        const newH = [...safeHistory];
+                        newH[idx].items.unshift(newItem);
+                        return newH;
+                    }
+                    return [{ date: today, items: [newItem] }, ...safeHistory];
+                });
+                setView('home');
+            };
+
+            const speakWord = (text) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const u = new SpeechSynthesisUtterance(text);
+                    u.lang = 'ru-RU';
+                    u.rate = 0.9;
+                    window.speechSynthesis.speak(u);
+                }
+            };
+
+            const HomeView = () => (
+                <div className="h-full flex flex-col relative bg-white">
+                    <div className="bg-white/95 backdrop-blur-md p-5 sticky top-0 z-10 flex justify-center items-center shrink-0 border-b border-gray-100">
+                        <h1 className="text-2xl font-serif font-black text-gray-900 tracking-tight">My Stickers</h1>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-32 no-scrollbar bg-gray-50">
+                        {isStorageFull && (
+                           <div className="bg-orange-50 text-orange-600 p-3 rounded-xl text-xs mb-2 flex items-center gap-2">
+                             <Icons.AlertCircle className="w-4 h-4" />
+                             <span>空间已满，已自动清理最早记录</span>
+                           </div>
+                        )}
+                        {(!history || history.length === 0) ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center pb-20">
+                                <Icons.Sparkles className="w-12 h-12 mb-4 opacity-30 text-blue-400" />
+                                <h3 className="text-lg font-bold text-gray-600 mb-1">单词本是空的</h3>
+                                <p className="text-sm text-gray-400">点击下方加号开始记录</p>
+                            </div>
+                        ) : (
+                            history.map((day, i) => (
+                                <div key={day.date || i} className={`rounded-[2rem] p-5 ${getPastelColor(i)} shadow-sm`}>
+                                    <div className="mb-3 flex items-baseline justify-between px-1">
+                                        <h2 className="text-xl font-serif text-gray-800">{day.date}</h2>
+                                        <span className="text-gray-800/60 text-[10px] font-bold uppercase tracking-wider bg-white/40 px-2 py-1 rounded-full">{day.items?.length || 0} WORDS</span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {day.items?.map((item) => (
+                                            <button key={item.id} onClick={() => { setSelectedHistoryItem(item); setView('detail'); }} className="flex flex-col items-center gap-2 group">
+                                                <div className="relative w-full aspect-square">
+                                                    <div className="w-full h-full p-1 bg-white rounded-xl shadow-sm border border-white/50 overflow-hidden">
+                                                        <img src={item.image} alt={item.word} className="w-full h-full object-cover rounded-lg" />
+                                                    </div>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-gray-700 truncate w-full text-center opacity-80">{item.word}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    <div className="absolute bottom-8 left-0 right-0 flex justify-center z-20 pointer-events-none pb-safe-bottom">
+                        <button onClick={() => setShowActionSheet(true)} className="pointer-events-auto bg-black text-white w-16 h-16 rounded-full shadow-2xl shadow-black/30 flex items-center justify-center transform active:scale-95 transition-all hover:scale-105 active:bg-gray-800">
+                            <Icons.Plus className="w-7 h-7" />
+                        </button>
+                    </div>
+                    {showActionSheet && (
+                        <div className="absolute inset-0 z-50 flex flex-col justify-end">
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowActionSheet(false)} />
+                            <div className="bg-white rounded-t-[2rem] p-6 pb-12 z-50 animate-in slide-in-from-bottom duration-300">
+                                <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
+                                <div className="space-y-3">
+                                    <button onClick={() => { fileInputRef.current?.click(); setShowActionSheet(false); }} className="w-full bg-gray-50 active:bg-gray-200 p-4 rounded-2xl flex items-center gap-4 transition-colors">
+                                        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white">
+                                            <Icons.ImageIcon className="w-5 h-5" />
+                                        </div>
+                                        <span className="text-base font-bold text-gray-900">从相册选择</span>
+                                    </button>
+                                    <button onClick={() => { setView('camera'); setShowActionSheet(false); }} className="w-full bg-gray-50 active:bg-gray-200 p-4 rounded-2xl flex items-center gap-4 transition-colors">
+                                        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white">
+                                            <Icons.Camera className="w-5 h-5" />
+                                        </div>
+                                        <span className="text-base font-bold text-gray-900">拍摄新照片</span>
+                                    </button>
+                                    <button onClick={() => setShowActionSheet(false)} className="w-full mt-2 py-4 text-gray-400 font-bold active:text-gray-600 text-sm">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+
+            const CameraView = () => (
+                <div className="fixed inset-0 bg-black z-50 flex flex-col h-full w-full">
+                    <canvas ref={canvasRef} className="hidden" />
+                    <div className="absolute inset-0 z-0 bg-black">
+                        {!cameraError ? (
+                            <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+                        ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-white p-6 text-center">
+                                <Icons.AlertCircle className="w-10 h-10 mb-4 text-gray-500" />
+                                <p className="mb-4 text-gray-400 text-sm">无法调用摄像头</p>
+                                <button onClick={() => fileInputRef.current?.click()} className="bg-white text-black px-6 py-2 rounded-full font-bold text-sm">上传照片</button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-20 bg-gradient-to-b from-black/50 to-transparent">
+                        <button onClick={() => { stopCamera(); setView('home'); }} className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-md text-white flex items-center justify-center">
+                            <Icons.X className="w-4 h-4" />
+                        </button>
+                        <div className="text-white/80 font-medium text-[10px] bg-black/30 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">{facingMode === 'environment' ? '后置' : '前置'}</div>
+                        <div className="w-8" />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-around px-10 pb-6 z-20">
+                        <button onClick={() => fileInputRef.current?.click()} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:scale-90 transition-all">
+                            <Icons.ImageIcon className="w-5 h-5" />
+                        </button>
+                        <button onClick={capturePhoto} disabled={cameraError} className="w-16 h-16 rounded-full border-[4px] border-white flex items-center justify-center bg-white/20 active:scale-90 transition-all active:bg-white/40">
+                            <div className="w-12 h-12 rounded-full bg-white shadow-lg"></div>
+                        </button>
+                        <button onClick={switchCamera} disabled={cameraError} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:rotate-180 transition-all duration-500">
+                            <Icons.RefreshCw className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            );
+
+            const ProcessingView = () => (
+                <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center">
+                    <img src={currentImage} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-xl scale-110" />
+                    <div className="relative z-10 flex flex-col items-center p-8 text-center">
+                        <div className="w-48 h-48 relative mb-8">
+                            <div className="absolute inset-0 border-2 border-white/20 rounded-2xl"></div>
+                            <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-400 shadow-[0_0_15px_rgba(96,165,250,1)] animate-[scan_2s_ease-in-out_infinite] z-20" style={{animation: 'scan 2s ease-in-out infinite'}}></div>
+                            <div className="w-full h-full overflow-hidden rounded-xl relative shadow-2xl">
+                                <img src={currentImage} className="w-full h-full object-cover" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2 bg-white/10 px-4 py-1.5 rounded-full backdrop-blur-md">
+                            <Icons.Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                            <span className="text-white text-sm font-bold">智谱AI 识别中...</span>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const ResultView = () => (
+                <div className="fixed inset-0 bg-gray-100 flex flex-col z-40">
+                    <div className="flex-1 flex flex-col items-center justify-center p-8">
+                        <div className="relative animate-in zoom-in duration-300">
+                            <div className="bg-white p-2 rounded-[2rem] shadow-2xl transform rotate-1 border-4 border-white">
+                                <div className="w-64 h-64 overflow-hidden rounded-[1.5rem] bg-gray-100 relative">
+                                    <img src={currentImage} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="mt-4 text-center pb-2 relative">
+                                    <h2 className="text-3xl font-black text-gray-800 tracking-tight">{currentResult?.word}</h2>
+                                    <p className="text-gray-400 font-medium mt-1 text-sm">/{currentResult?.pronunciation}/</p>
+                                </div>
+                            </div>
+                            <div className="absolute -top-3 -right-3 bg-yellow-400 text-black font-black px-4 py-2 rounded-xl shadow-lg transform rotate-6 border-2 border-white text-lg">
+                                {currentResult?.meaning}
+                            </div>
+                        </div>
+                        <div className="mt-12 w-full max-w-xs space-y-3">
+                            <button onClick={saveResult} className="w-full bg-black text-white py-4 rounded-xl font-bold text-base shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-2">
+                                <Icons.Sparkles className="w-4 h-4" /> 收藏单词
+                            </button>
+                            <button onClick={() => setView('home')} className="w-full text-gray-400 py-3 font-bold text-sm active:scale-95 transition-transform">不保存，重拍</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const DetailView = () => {
+                const item = selectedHistoryItem;
+                if (!item) return null;
+                return (
+                    <div className="fixed inset-0 bg-white z-40 flex flex-col">
+                        <div className="px-4 py-4 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-xl z-10 pt-safe-top">
+                            <button onClick={() => setView('home')} className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors">
+                                <Icons.ChevronLeft className="w-6 h-6 text-gray-800" />
+                            </button>
+                            <span className="font-serif font-bold text-lg text-gray-800">{item.date}</span>
+                            <div className="w-10" />
+                        </div>
+                        <div className="flex-1 overflow-y-auto pb-10">
+                            <div className="px-6 pt-6 pb-8 text-center">
+                                <div className="mx-auto w-40 h-40 mb-6 p-1.5 bg-white rounded-[2rem] shadow-2xl border border-gray-100 rotate-2">
+                                    <img src={item.image} className="w-full h-full object-cover rounded-[1.5rem]" />
+                                </div>
+                                <h1 className="text-4xl font-black text-gray-900 mb-2">{item.word}</h1>
+                                <div className="flex items-center justify-center gap-2 mb-4">
+                                    <span className="text-gray-400 font-semibold text-lg">[{item.pronunciation}]</span>
+                                    <button onClick={() => speakWord(item.word)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-blue-100 active:text-blue-600 active:scale-90 transition-all">
+                                        <Icons.Volume2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div className="inline-block bg-gray-100 px-5 py-1.5 rounded-full text-gray-700 text-lg font-bold">{item.meaning}</div>
+                            </div>
+                            <div className="px-6 space-y-4">
+                                <div className="flex items-center gap-2 text-gray-400 uppercase tracking-wider text-[10px] font-bold pl-1">
+                                    <Icons.BookOpen className="w-3 h-3" /> 初学者例句
+                                </div>
+                                {item.sentences?.map((sentence, idx) => (
+                                    <div key={idx} className="bg-gray-50 p-5 rounded-2xl relative group border border-gray-100">
+                                        <p className="text-lg font-bold text-gray-800 mb-1 leading-tight">{sentence.ru}</p>
+                                        <p className="text-gray-500 text-sm">{sentence.cn}</p>
+                                        <button onClick={() => speakWord(sentence.ru)} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white w-8 h-8 flex items-center justify-center rounded-full shadow-sm text-gray-400 active:text-blue-500 active:scale-90 transition-all">
+                                            <Icons.Volume2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ErrorView = () => (
+                <div className="fixed inset-0 bg-gray-50 flex flex-col items-center justify-center p-8 z-50">
+                    <div className="bg-white p-8 rounded-[2rem] shadow-xl text-center max-w-sm w-full">
+                        <Icons.AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+                        <h2 className="text-lg font-bold text-gray-800 mb-2">出错了</h2>
+                        <p className="text-gray-500 mb-6 text-sm">{errorMsg}</p>
+                        <button onClick={() => setView('home')} className="w-full bg-black text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">返回主页</button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="w-full h-full relative">
+                    <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
+                    {view === 'home' && <HomeView />}
+                    {view === 'camera' && <CameraView />}
+                    {view === 'processing' && <ProcessingView />}
+                    {view === 'result' && <ResultView />}
+                    {view === 'detail' && <DetailView />}
+                    {view === 'error' && <ErrorView />}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
